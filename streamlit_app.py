@@ -5,7 +5,7 @@ from utils import check_password, hash_password, get_user, log_action, create_us
 import admin, user_panel, subuser_panel
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title='DMTS', layout='wide')
+st.set_page_config(page_title='DTRACK', layout='wide')
 init_db()
 ensure_default_admin()
 
@@ -31,7 +31,7 @@ h1,h2,h3{color:var(--ink);}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💽 DMTS - Data Management & Tracking System")
+st.title("💽 DTRACK ")
 st.caption("DIAL - Digital Analytics & Intelligence Lab")
 
 # session
@@ -45,7 +45,7 @@ try:
         st.sidebar.title('Welcome')
         action = st.sidebar.radio('Action', ['Login','Register','About'])
         if action == 'About':
-            st.sidebar.info('DMTS prototype - register as a conducting team. Admin approves registrations.')
+            st.sidebar.info('DTRACK prototype - register as a conducting team. Admin approves registrations.')
         if action == 'Register':
             st.header('Register - Conducting Team')
             with st.form('reg'):
