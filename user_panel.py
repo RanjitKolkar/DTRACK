@@ -25,6 +25,39 @@ def safe_dataframe(rows, table: str):
     except Exception:
         return pd.DataFrame([])
 
+# Status color mapping
+STATUS_COLORS = {
+    'available': {'bg': '#d4edda', 'text': '#155724'},      # Green
+    'issued': {'bg': '#fff3cd', 'text': '#856404'},          # Yellow/Amber
+    'sealed': {'bg': '#cce5ff', 'text': '#004085'},          # Blue
+    'returned': {'bg': '#e2e3e5', 'text': '#383d41'},        # Gray
+    'in_extraction': {'bg': '#f8d7da', 'text': '#721c24'},   # Red/Pink
+}
+
+def style_status_dataframe(df):
+    """Apply color styling to dataframe based on status column"""
+    if df.empty or 'status' not in df.columns:
+        return df
+    
+    def highlight_row(row):
+        status = row.get('status', '')
+        colors = STATUS_COLORS.get(status, {'bg': 'white', 'text': 'black'})
+        return [f'background-color: {colors["bg"]}; color: {colors["text"]}'] * len(row)
+    
+    styled = df.style.apply(highlight_row, axis=1)
+    return styled
+
+def render_status_legend():
+    """Render status color legend"""
+    st.markdown("""
+    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+        <span style="padding: 4px 10px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 12px;">🟢 Available</span>
+        <span style="padding: 4px 10px; background: #fff3cd; color: #856404; border-radius: 4px; font-size: 12px;">🟡 Issued</span>
+        <span style="padding: 4px 10px; background: #cce5ff; color: #004085; border-radius: 4px; font-size: 12px;">🔵 Sealed</span>
+        <span style="padding: 4px 10px; background: #e2e3e5; color: #383d41; border-radius: 4px; font-size: 12px;">⚪ Returned</span>
+        <span style="padding: 4px 10px; background: #f8d7da; color: #721c24; border-radius: 4px; font-size: 12px;">🔴 In Extraction</span>
+    </div>
+    """, unsafe_allow_html=True)
 def get_subusers_with_hdd(parent_user):
     """Get set of subuser usernames that have HDDs assigned"""
     try:
@@ -67,6 +100,8 @@ def extract_username_from_selection(selection):
 def render_my_hdds_tab(user):
     """View HDDs assigned by admin to this user"""
     st.subheader("💿 My Assigned HDDs")
+    # Status legend
+    render_status_legend()
     
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -94,18 +129,20 @@ def render_my_hdds_tab(user):
     df = safe_dataframe(rows, "hdd_records")
     
     if not df.empty:
-        st.caption(f"📊 Total: {len(df)} HDDs")
-        st.dataframe(df, use_container_width=True, height=400)
-        
+        # Status metrics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total", len(df))
+            st.metric("📊 Total", len(df))
         with col2:
             issued = len(df[df['status'] == 'issued']) if 'status' in df.columns else 0
-            st.metric("Issued", issued)
+            st.metric("🟡 Issued", issued)
         with col3:
             sealed = len(df[df['status'] == 'sealed']) if 'status' in df.columns else 0
-            st.metric("Sealed", sealed)
+            st.metric("🔵 Sealed", sealed)
+        
+        # Color-coded dataframe
+        styled_df = style_status_dataframe(df)
+        st.dataframe(styled_df, use_container_width=True, height=400)
     else:
         st.info("🔭 No HDDs assigned yet")
 
@@ -229,6 +266,9 @@ def render_view_data_tab(user):
     
     st.info("ℹ️ Read-only view. Only Admin can edit data.")
     
+    # Status legend
+    render_status_legend()
+    
     try:
         with db_connection() as conn:
             c = conn.cursor()
@@ -246,26 +286,51 @@ def render_view_data_tab(user):
     df = safe_dataframe(rows, "hdd_records")
     
     if not df.empty:
-        st.caption(f"📊 Total: {len(df)} records")
+        # Status metrics
+        col1, col2, col3, col4 = st.columns(4)
+        status_counts = df['status'].value_counts().to_dict() if 'status' in df.columns else {}
+        
+        with col1:
+            st.metric("📊 Total", len(df))
+        with col2:
+            st.metric("🟡 Issued", status_counts.get('issued', 0))
+        with col3:
+            st.metric("🔵 Sealed", status_counts.get('sealed', 0))
+        with col4:
+            st.metric("🔴 In Extraction", status_counts.get('in_extraction', 0))
         
         # Filter by subuser
         subusers = df['assigned_subuser'].unique() if 'assigned_subuser' in df.columns else []
         selected_subuser = st.selectbox("Filter by Subuser", ["All"] + [s for s in subusers if s])
         
+        filtered_df = df.copy()
         if selected_subuser != "All":
-            df = df[df['assigned_subuser'] == selected_subuser]
+            filtered_df = df[df['assigned_subuser'] == selected_subuser]
         
-        st.dataframe(df, use_container_width=True, height=400)
+        # Color-coded dataframe
+        styled_df = style_status_dataframe(filtered_df)
+        st.dataframe(styled_df, use_container_width=True, height=400)
         
         # Show detailed view
-        if not df.empty:
+        if not filtered_df.empty:
             st.markdown("---")
-            st.markdown("##### Detailed View")
-            serial_nos = df['serial_no'].tolist()
+            st.markdown("##### 📄 Detailed View")
+            serial_nos = filtered_df['serial_no'].tolist()
             selected = st.selectbox("Select HDD for details", serial_nos)
             
             if selected:
-                detail = df[df['serial_no'] == selected].iloc[0]
+                detail = filtered_df[filtered_df['serial_no'] == selected].iloc[0]
+                
+                # Status badge
+                status = detail['status']
+                status_color = STATUS_COLORS.get(status, {'bg': '#e2e3e5', 'text': '#383d41'})
+                st.markdown(f"""
+                <span style="padding: 6px 12px; background: {status_color['bg']}; color: {status_color['text']}; 
+                      border-radius: 6px; font-weight: 600; display: inline-block; margin-bottom: 15px;">
+                    Status: {status.upper()}
+                </span>
+                """, unsafe_allow_html=True)
+                
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -274,7 +339,7 @@ def render_view_data_tab(user):
                     st.text_input("Search Date", value=str(detail['date_search'] or ''), disabled=True)
                 
                 with col2:
-                    st.text_input("Status", value=str(detail['status']), disabled=True)
+                    st.text_input("Unit Space", value=str(detail['unit_space'] or ''), disabled=True)
                     st.text_input("Assigned to", value=str(detail['assigned_subuser'] or ''), disabled=True)
                     st.text_input("Seized Date", value=str(detail['date_seized'] or ''), disabled=True)
                 
@@ -301,7 +366,6 @@ def render_create_subuser_tab(user):
         subusers = []
     
     if subusers:
-        st.markdown("##### My Subusers")
         # Add HDD status column to dataframe
         subusers_with_hdd = get_subusers_with_hdd(user)
         df_data = []
@@ -358,7 +422,7 @@ def render_extraction_status_tab(user):
     """View extraction and analysis status"""
     st.subheader("🔍 Extraction & Analysis Status")
     
-    tab1, tab2 = st.tabs(["Extractions", "Analysis"])
+    tab1, tab2 = st.tabs(["📤 Extractions", "📊 Analysis"])
     
     with tab1:
         try:
@@ -376,6 +440,7 @@ def render_extraction_status_tab(user):
         
         df = safe_dataframe(extractions, "extraction_records")
         if not df.empty:
+            st.caption(f"📊 Total: {len(df)} records")
             st.dataframe(df, use_container_width=True, height=300)
         else:
             st.info("📭 No extraction records")
@@ -397,6 +462,7 @@ def render_extraction_status_tab(user):
         
         df = safe_dataframe(analysis, "analysis_records")
         if not df.empty:
+            st.caption(f"📊 Total: {len(df)} records")
             st.dataframe(df, use_container_width=True, height=300)
         else:
             st.info("📭 No analysis records")

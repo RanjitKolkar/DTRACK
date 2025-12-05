@@ -25,6 +25,48 @@ def safe_dataframe(rows, table: str):
     except Exception:
         return pd.DataFrame([])
 
+# Status color mapping
+STATUS_COLORS = {
+    'available': {'bg': '#d4edda', 'text': '#155724'},      # Green
+    'issued': {'bg': '#fff3cd', 'text': '#856404'},          # Yellow/Amber
+    'sealed': {'bg': '#cce5ff', 'text': '#004085'},          # Blue
+    'returned': {'bg': '#e2e3e5', 'text': '#383d41'},        # Gray
+    'in_extraction': {'bg': '#f8d7da', 'text': '#721c24'},   # Red/Pink
+}
+
+STATUS_BADGES = {
+    'available': '🟢 Available',
+    'issued': '🟡 Issued',
+    'sealed': '🔵 Sealed',
+    'returned': '⚪ Returned',
+    'in_extraction': '🔴 In Extraction',
+}
+
+def style_status_dataframe(df):
+    """Apply color styling to dataframe based on status column"""
+    if df.empty or 'status' not in df.columns:
+        return df
+    
+    def highlight_row(row):
+        status = row.get('status', '')
+        colors = STATUS_COLORS.get(status, {'bg': 'white', 'text': 'black'})
+        return [f'background-color: {colors["bg"]}; color: {colors["text"]}'] * len(row)
+    
+    styled = df.style.apply(highlight_row, axis=1)
+    return styled
+
+def render_status_legend():
+    """Render status color legend"""
+    st.markdown("""
+    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+        <span style="padding: 4px 10px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 12px;">🟢 Available</span>
+        <span style="padding: 4px 10px; background: #fff3cd; color: #856404; border-radius: 4px; font-size: 12px;">🟡 Issued</span>
+        <span style="padding: 4px 10px; background: #cce5ff; color: #004085; border-radius: 4px; font-size: 12px;">🔵 Sealed</span>
+        <span style="padding: 4px 10px; background: #e2e3e5; color: #383d41; border-radius: 4px; font-size: 12px;">⚪ Returned</span>
+        <span style="padding: 4px 10px; background: #f8d7da; color: #721c24; border-radius: 4px; font-size: 12px;">🔴 In Extraction</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 # Default options (used if DB empty)
 DEFAULT_UNITS = ["4(1) Delhi", "4(2) Mumbai", "4(3) Kolkata", "4(4) Chennai", 
                  "4(5) Hyderabad", "4(6) Bangalore", "4(7) Lucknow", "4(8) Chandigarh"]
@@ -327,7 +369,7 @@ def render_extraction_tab(user):
     # Get dynamic options
     vendor_options = get_options('vendor')
     
-    tab1, tab2 = st.tabs(["Send to Vendor", "Extraction Records"])
+    tab1, tab2 = st.tabs(["📤 Send to Vendor", "📋 Extraction Records"])
     
     with tab1:
         st.markdown("##### Send HDD for Extraction (when received from User)")
@@ -724,8 +766,11 @@ def render_subusers_tab(user):
                     st.error(f"❌ Error: {e}")
 
 def render_records_tab():
-    """View all records"""
+    """View all records with color coding"""
     st.subheader("💾 All HDD Records")
+
+    # Status legend
+    render_status_legend()
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -758,8 +803,26 @@ def render_records_tab():
     df = safe_dataframe(rows, "hdd_records")
     
     if not df.empty:
-        st.caption(f"📊 Total: {len(df)}")
-        st.dataframe(df, use_container_width=True, height=500)
+        # Status summary metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
+        status_counts = df['status'].value_counts().to_dict() if 'status' in df.columns else {}
+        
+        with col1:
+            st.metric("🟢 Available", status_counts.get('available', 0))
+        with col2:
+            st.metric("🟡 Issued", status_counts.get('issued', 0))
+        with col3:
+            st.metric("🔵 Sealed", status_counts.get('sealed', 0))
+        with col4:
+            st.metric("⚪ Returned", status_counts.get('returned', 0))
+        with col5:
+            st.metric("🔴 In Extraction", status_counts.get('in_extraction', 0))
+        
+        st.caption(f"📊 Total Records: {len(df)}")
+        
+        # Apply color styling
+        styled_df = style_status_dataframe(df)
+        st.dataframe(styled_df, use_container_width=True, height=500)
     else:
         st.info("🔭 No records found")
 
